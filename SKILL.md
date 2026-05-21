@@ -1,6 +1,6 @@
 ---
 name: deep-planning
-version: "0.1.0"
+version: "0.4.0"
 description: Mode-based router for any complex planning exercise prior to executing. Three modes (Quick / Build / Strategic) calibrate ordering, skill selection, and Compound Engineering integration to the intent and complexity of the work. Replaces /spec-writer (hard-retired 2026-05-08). Use when the user says "spec out X", "design the system for X", "let's plan X properly", "scope this sub-project", "evaluate", "explore", "from scratch", "rethink", or returns to an in-progress /project-create with non-trivial complexity.
 user-invocable: true
 argument-hint: "topic description (short sentence of what to plan)"
@@ -49,11 +49,12 @@ superpowers:brainstorming  →  /ce:plan
 #### Build mode
 
 ```
-/last30days  →  /deep-research  →  [opt-in /find-repos]  →  [ce-brainstorm | superpowers:brainstorming]  →  /ce:plan  →  [opt-in /ce-doc-review]
+/last30days  →  /deep-research  →  [opt-in /find-repos]  →  [opt-in /find-related]  →  [ce-brainstorm | superpowers:brainstorming]  →  [opt-in /playground]  →  /ce:plan  →  [opt-in /ce-doc-review]
 ```
 
 - **Order = recency-first.** Internal operational context (Bufalinda blockers, recent decisions, in-flight work) shapes what's worth researching externally. If `/last30days` surfaces a blocker at a data source, the research stage pivots from "framework Y" to "workarounds for that data source." Putting research first risks burning the research budget on the wrong questions. (Codified from a 2026-04-20 retro on the predecessor `/spec-writer`.)
 - **Stage 2.5 — `/find-repos` (opt-in, auto-suggested for code work).** After `/deep-research` surfaces state-of-the-art, `/find-repos` materializes that into a scored shortlist of actual GitHub repos (6-dimension scoring: maintenance, security, license, community, fit, hygiene). Makes the adopt-vs-build check explicit before brainstorming. Auto-suggest the run when `/deep-research` surfaces multiple existing tools/approaches OR when the work is clearly code-implementation-bound. Skip when work is non-code (career engagements, business strategy, internal-data-unique automations) or when reuse has already been ruled out.
+- **Stage 2.6 — `/find-related` (opt-in, auto-suggested).** After external research has surfaced the state-of-the-art, ground the work in the org's *own* prior reading. `/find-related` scans `00 HUB/00 READ_REVIEW/` + `03 REFERENCE/` + wikis and returns a scored checkbox manifest to INBOX. Mirrors `/find-repos`'s opt-in shape but with vault-content as the corpus instead of GitHub repos. **Auto-suggest** when (a) the topic maps to an existing area (`AREA` is known or inferable from the seed), (b) `/last30days` or `/deep-research` surfaced concepts the vault has likely already touched (e.g., the org has a wiki in the domain). **Skip** when the topic is genuinely novel (no prior vault activity expected) or when the user explicitly opts out. Forward selected candidate excerpts to the brainstorm stage as vault-context grounding — the brainstorm starts warm, not cold.
 - **Brainstorm = conditional on work properties** (see Brainstorm skill selection below). Default for typical Build work = `ce-brainstorm` (clean native handoff to `ce-plan`, no manual handoff override). Switches to `superpowers:brainstorming` when triggers fire.
 - **Stage 5 audit = opt-in.** At end of Stage 4, ask: "Run multi-lens audit (`/ce-doc-review`)? Recommended when plan crosses 500+ LOC, modules, or teams." Default suggestion for Build = no.
 - **Output paths** — all artifacts to `00 HUB/00 INBOX/`.
@@ -63,10 +64,10 @@ superpowers:brainstorming  →  /ce:plan
 #### Strategic mode
 
 ```
-/ce-strategy  →  [optional /ce-ideate]  →  /deep-research  →  /last30days  →  superpowers:brainstorming  →  /ce:plan  →  [opt-in /ce-doc-review]
+/ce-strategy  →  [optional /ce-ideate]  →  /deep-research  →  /last30days  →  [opt-in /find-related]  →  superpowers:brainstorming  →  [opt-in /playground]  →  /ce:plan  →  [opt-in /ce-doc-review]
 ```
 
-- **Order = strategy-first, then research-first.** `/ce-strategy` writes/refines the strategic anchor; `/deep-research` then anchors first-principles framing; `/last30days` enters third, scoped by what research surfaced.
+- **Order = strategy-first, then research-first.** `/ce-strategy` writes/refines the strategic anchor; `/deep-research` then anchors first-principles framing; `/last30days` enters third, scoped by what research surfaced. `/find-related` (opt-in) sits between `/last30days` and the brainstorm — same shape and rationale as Build's Stage 2.6, but positioned after both research stages have run so the vault-content search can be scoped by what's now known.
 - **Stage 0 — `/ce-strategy` (always-on).** Per CE methodology, `/ce-strategy` is the upstream anchor read by ce-ideate, ce-brainstorm, and ce-plan as grounding. Creates or refines the strategic doc for this work. **Vault adaptation:** in CE the artifact is `STRATEGY.md` at repo root; in vault context, the natural strategic anchor is the project brief, Area MOC, or wiki page. Stage 0 logic:
   - (a) if a relevant project brief / area MOC exists, refine its strategic framing section in place;
   - (b) if no anchor exists for this work, create a new strategic context doc at the appropriate level (`01 PROJECTS/<topic>/<topic>.md` or `02 AREAS/<area>/STRATEGY.md`);
@@ -105,6 +106,27 @@ Otherwise, use `ce-brainstorm` (default for mid-scope operational work — produ
 
 ## Steps
 
+### Step 0 — INBOX audit (mandatory pre-pipeline check)
+
+Before proposing a mode or running any stage, audit `00 HUB/00 INBOX/` for files whose names match topic keywords from the user's prompt. If 2+ artifacts on the same topic exist (excluding the active artifact being created), STOP and surface to the user:
+
+> "N competing artifacts on this topic exist in INBOX. How do you want to reconcile?"
+>
+> Options:
+> - (a) **Treat one as authoritative** — name which one; mark others superseded
+> - (b) **Treat current work as authoritative** — mark prior artifacts superseded mid-flight
+> - (c) **Reconcile all into a unified plan** — Stage 4 explicitly integrates the prior artifacts
+> - (d) **Pause for user to read prior artifacts first**, then redirect
+
+This check is cheap (one `ls` + glob match against topic keywords) and catches a class of failure where the pipeline runs to Stage 4 before discovering that competing strategy briefs already exist on the same topic. The user's explicit reconciliation choice flows into the Stage 4 plan's Sources & References as `inputs reconciled` rather than `origin` alone.
+
+**Skip Step 0** when:
+- The topic is genuinely novel (no prior INBOX activity expected)
+- INBOX has been swept clean within the last 24 hours (recent `/session-close` Phase 2.8 ran)
+- User explicitly says "I know this is greenfield, skip the audit"
+
+Codified from a 2026-05-08 retro after a Bufalinda AIT meta-tool layer pipeline run discovered two competing strategy briefs (v1 Team Premium + v2 Z.ai-portability) at Stage 4 that should have been caught at Stage 0. The reconciliation cost ~30 minutes mid-flight; a Stage 0 INBOX audit would have caught it before any agent dispatch.
+
 ### Step 1 — Parse the topic, propose mode + brainstorm skill, confirm scope
 
 Read the user's topic description. Restate in one sentence. Propose mode + brainstorm skill with one-line rationale. Ask the user to confirm before running any stage:
@@ -125,6 +147,7 @@ Each mode's chain runs stage-by-stage, passing context forward explicitly. See "
 **Output overrides per stage:**
 
 - `/deep-research` → already defaults to `00 HUB/00 INBOX/Research - <Topic> - YYYY-MM-DD.md` (no override needed)
+- `/find-related` → already defaults to `00 HUB/00 INBOX/YYYY-MM-DD-find-related-<slug>.md` (no override needed). Pass `--target` if a downstream apply step should know which artifact to modify; in Strategic mode no apply runs by default (deep-planning outputs are scattered — user picks where to apply).
 - `superpowers:brainstorming` → defaults to `docs/superpowers/specs/`. Override to `00 HUB/00 INBOX/Brainstorm - <Topic> - YYYY-MM-DD.md` per `feedback_plans_to_inbox.md`. Override the terminal handoff from `writing-plans` to `compound-engineering:ce-plan`.
 - `ce-brainstorm` → defaults to `docs/brainstorms/`. Override to `00 HUB/00 INBOX/Requirements - <Topic> - YYYY-MM-DD.md`.
 - `compound-engineering:ce-plan` → defaults to `docs/plans/`. Override to `00 HUB/00 INBOX/YYYY-MM-DD-NNN-<type>-<name>-plan.md`.
@@ -149,6 +172,55 @@ Validated 2026-05-02 with [[JV Career Reboot]] — Albert answered 10 framing de
 **When to fall back to standard interactive mode:** decisions are open-ended (not multiple-choice), user wants to think through one at a time, lower-context user needs guided exposition, OR user explicitly asks for the walkthrough.
 
 **Output:** identical to standard mode — a Decision Ledger that feeds Stage 4. The mode only changes the *interaction shape*, not the artifact.
+
+### Step 3.5 — Playground hop (cross-mode, opt-in, auto-suggested on trigger)
+
+After Stage 3 produces its decision ledger / requirements doc, evaluate whether a Playground hop adds value before Stage 4. **Playground** — invoked as `/playground` (slash command from `playground-shortcut@local-plugins`, a thin wrapper) or directly as the `playground:playground` skill (ships in `playground@claude-plugins-official`) — is an official Anthropic Claude Code plugin that generates a standalone HTML file the user can manipulate in the browser; the playground terminates in an output prompt that gets pasted back to amend the brainstorm artifact before plan stage runs. Prefer the `/playground` slash form when surfacing the offer to the user — it tab-completes and shows arg hints inline.
+
+**Auto-suggest** a Playground hop when ANY of these triggers fire — these are the cases where text under-serves the artifact:
+
+- **Visual-spatial decisions remain underspecified** — UI layout, component arrangement, architecture topology, design tradeoffs.
+- **Quantitative balance decisions** — game balance, weight allocations, pricing tiers, resource budgets where the user benefits from seeing-and-tweaking.
+- **Decision-tree or matrix outputs** — option comparison grids, persona-review matrices, where commenting on specific cells is faster than narrating which cell.
+- **`superpowers:brainstorming` was the brainstorm skill** AND its visual-companion phase surfaced an artifact worth refining further (correlated signal — visual triggers fire for both).
+
+**Skip** when:
+
+- The brainstorm output is purely textual (engagement plans, business logic, narrative content).
+- The user opts out — Playground adds ~10–20 min; if velocity matters, skip.
+- The plugin is not installed locally — surface install commands but do not block (`/plugin marketplace update claude-plugins-official` then `/plugin install playground@claude-plugins-official`).
+
+**UX shape — mirrors the `/find-repos` opt-in pattern at Stage 2.5.** Present a one-paragraph offer with the specific ambiguity named and the recommended interaction verb:
+
+> "Brainstorm output complete. **Playground hop available** — `playground:playground` will generate an interactive HTML to shape *<specific artifact from brainstorm>* before plan stage.
+>
+> Recommended because: *<one-line reason matching trigger>*.
+>
+> Interaction verb: *<drag / weight / comment / tweak / approve-reject>*.
+>
+> Best-matching template: *<design-playground | data-explorer | concept-map | document-critique | diff-review | code-map>*.
+>
+> Run? [Y / n / skip-and-note-why]"
+
+If user accepts, invoke `playground:playground` with a prompt template that names BOTH the artifact and the interaction verb (vague playground prompts produce nothing usable — see Rules below):
+
+> "Use the `playground:playground` skill to create an HTML that lets me *<interaction verb>* the *<specific artifact>* from `<path to brainstorm doc>` (best match: *<template-name>* template). Output a refinement prompt I can paste back to amend the brainstorm before plan stage."
+
+The user's output prompt is treated as a **brainstorm amendment** — appended to the Decision Ledger with a `## Playground amendment (YYYY-MM-DD)` heading. Stage 4 ce-plan reads the amended ledger as a single artifact; the playground hop is invisible to ce-plan's inputs.
+
+**Cross-mode availability.** Playground is available in Quick, Build, and Strategic modes — it is not encoded into any mode's chain diagram because it is conditional on the *artifact* having a visual / spatial / balance / matrix property, not on the mode. Quick mode runs are rarely candidates (small scope ≠ visual ambiguity), but a small UI feature in Quick mode IS a valid trigger.
+
+**Skip-and-note-why** is a first-class option, not just a "no" — when the user skips, log the reason in a one-liner appended to the brainstorm doc (`<!-- playground hop skipped 2026-05-11: textual artifact, no spatial component -->`). Codifies why the trigger fired but the hop didn't, helps future-you tune the triggers.
+
+**Rules specific to this hop:**
+
+- **Name the interaction verb.** Vague prompts ("use `playground:playground` to brainstorm my architecture") produce generic diagrams. Specific prompts ("use `playground:playground` to let me rearrange these 7 services and comment on each connection") produce usable artifacts. The verb is non-negotiable.
+- **Name the template.** `playground:playground` ships 6 templates (`design-playground`, `data-explorer`, `concept-map`, `document-critique`, `diff-review`, `code-map`). Match the artifact to the closest template in the prompt — the skill picks one automatically if you don't, but explicit selection avoids template-mismatch retries.
+- **Name the specific artifact.** Reference the brainstorm doc path or a specific section, not a topic. "The decision matrix in section 4.2 of `<brainstorm doc>`" beats "the architecture decisions."
+- **Single-shot, not multi-turn.** Playground hops are minutes-long, not days-long. If the user wants iterative refinement, that's the brainstorm stage's job, not Playground's.
+- **Playground produces a prompt, not a final artifact.** The output is always a *prompt-to-paste-back* that amends the brainstorm doc. Don't treat the HTML itself as a deliverable.
+
+Codified from [[Playground Plugin in Deep Planning]] (Thariq @ Anthropic, 2026-01-29) — 5 demonstrated use-case shapes cluster into 3 patterns (visualize-and-comment, adjust-and-output, layout-explore) that the trigger list above maps to. Pattern proposed 2026-05-11; integration here is the first concrete adoption. Cross-skill integration audit pending in [[Playground Plugin — Cross-Skill Integration Audit]].
 
 ### Step 4 — Plan stage (`compound-engineering:ce-plan`)
 
@@ -181,6 +253,7 @@ After the plan lands (and audit if run), present a richer post-execution menu th
 **Refine the plan further**
 - `/ce-doc-review` — multi-lens parallel audit (7 personas), if not already run in Stage 5
 - `/ce:plan` deepening pass — re-invoke ce-plan with "deepen this plan" intent for Phase 5.3 confidence check
+- **Playground visualization** — invoke via `/playground <verb> the <plan section> (template: <name>)` (slash wrapper from `playground-shortcut@local-plugins`) or directly via `playground:playground` (ships in `playground@claude-plugins-official`). Generates an HTML that lets you manipulate the plan's architecture / decision-tree / weights and output a refinement prompt. Same triggers as Step 3.5; here the artifact is the *plan tree* (or a specific phase's task list) rather than the brainstorm ledger. Auto-suggested when the plan touches UI/UX, architecture topology, balance/budget allocation, or contains a matrix output (e.g., risk × phase grid). Template defaults: `code-map` for architecture, `design-playground` for UI/weights, `document-critique` for plan-section review.
 - Open in Proof for human-in-the-loop review (`/ce-proof`)
 
 **Reuse before building**
@@ -203,6 +276,7 @@ After the plan lands (and audit if run), present a richer post-execution menu th
 
 - **Mode is selected explicitly per run.** No silent defaults beyond the trigger-based proposal in Step 1. User confirms before any stage runs.
 - **Order within a mode is non-negotiable.** Build = recency-first; Strategic = strategy-first then research-first; Quick = no research. If the user asks to skip a stage, record the reason in the plan's Sources section (so future readers know context is missing).
+- **Stage-2-skip compensating mechanism.** When the user explicitly skips `/deep-research` (Stage 2 in Build/Strategic), dispatch a focused vault-context validation sub-agent BEFORE Stage 3 brainstorm runs. The sub-agent's job is to validate 3-5 load-bearing assumptions about the org/repo state that would otherwise be assumed — e.g., does this GitHub org exist, is this skill/migration already approved, are there competing artifacts, what's the gating decision. Pattern: agent reads existing context (project briefs, conventions, area MOCs, recent INBOX, sprint Continuation Prompts) and reports findings concisely (~200 words). Stage 3 brainstorm consumes the sub-agent's findings as compensating context for the missing research grounding. Codified from a 2026-05-08 retro — improvising the dispatch surfaced 3 critical findings (GitHub org gate, OC migration already approved, frontmatter audit prereq) that would have invalidated the brainstorm if discovered later.
 - **All intermediate artifacts land in `00 HUB/00 INBOX/`.** Override every child skill's default output path. This is a hard user convention (see `feedback_plans_to_inbox.md`).
 - **Spanish vs English:** match the conversation language. If the plan will be reviewed with Bufalinda team members (JC, Manuel, Ronnel, etc.), output in Venezuelan Spanish (tuteo) per Bufalinda Rule 1.
 - **Context forwarding is explicit.** Each stage's prompt to the next includes a summary of the prior stage's findings. Don't rely on the subagent to infer context.
@@ -248,6 +322,11 @@ Pre-rename evidence (under predecessor `/spec-writer`):
 
 Post-rename evidence: see commit log for `/deep-planning` runs from 2026-05-08 forward.
 
+- **2026-05-11 [[2026-05-11 - Reporte Semanal Bufalinda - Spec v0.1]]** — Build mode COMPRESSED run validation (Stage-2-skip + brainstorm/plan fused). Demonstrated:
+  - Skipping `/last30days` + `/deep-research` is sound when (a) MECE seed is user-locked upfront, (b) tech constraints pre-enumerated in invocation, (c) stakeholder comments lifted verbatim from brief Working Notes, (d) the invoking session has full codebase context already loaded. Saved ~45 min vs. full chain.
+  - Brainstorm + Plan stages fused into a single unified spec doc (one review gate) is the right shape when the user explicitly asks for "spec for review before implementation." Two-doc handoff (brainstorm → plan) is overhead when the user reviews once anyway.
+  - **MECE-table shape note (codify for future Build-mode brainstorms):** When designing MECE between content surfaces that share an audience-or-cadence axis, the standard 2-column "A yes / B yes" grid degenerates to false-choice. Add a **3rd "Interpretation Frame" column** that names *how* a shared metric is interpreted differently in each surface (e.g., Mensual: "did the strategy work this month?" vs Semanal: "are we on pace this week?"). This rule lets the same metric live in both reports with defensible justification — without it, every shared metric gets artificially banished to one side. Codified from Reporte Semanal first-issue MECE table (24 content rows × 3 columns, 9 of them deliberate overlap).
+
 ## Dependencies
 
 ### Required
@@ -260,8 +339,11 @@ Post-rename evidence: see commit log for `/deep-planning` runs from 2026-05-08 f
 
 ### Optional
 - `/find-repos` — Stage 2.5 in Build mode (opt-in; auto-suggested when work is code-implementation-bound and `/deep-research` surfaced multiple existing tools).
+- `/find-related` — Stage 2.6 in Build and Strategic modes (opt-in; auto-suggested when topic maps to an existing area or research surfaced concepts the vault likely already covers). Scans `00 HUB/00 READ_REVIEW/` + `03 REFERENCE/` + wikis; produces a checkbox manifest in INBOX. Forward selected candidate excerpts to brainstorm as vault-context grounding. No auto-apply by default — `/deep-planning` outputs land in multiple files, so the user picks where to apply (or runs `/find-related apply` manually post-plan).
 - `compound-engineering:ce-ideate` — Stage 0.5 in Strategic mode (optional; invoked when direction remains unclear after `/ce-strategy`).
 - `compound-engineering:ce-doc-review` — Stage 5 in any mode (opt-in everywhere; default suggestion is yes for Strategic, no for Build, not suggested for Quick).
+- `playground:playground` (skill; plugin spec `playground@claude-plugins-official`) — Step 3.5 (cross-mode, opt-in; auto-suggested when brainstorm output has visual / spatial / balance / matrix properties) and Step 6 disposition (post-plan visualization). Official Anthropic Claude Code plugin; generates standalone HTML for visual interaction via 6 templates (`design-playground`, `data-explorer`, `concept-map`, `document-critique`, `diff-review`, `code-map`), ending in a prompt artifact that feeds back into the pipeline. Install (if missing) via `/plugin marketplace update claude-plugins-official` then `/plugin install playground@claude-plugins-official`. Skip the stage if not installed — do not block. **Invocation surface:** (a) `/playground` slash command from `playground-shortcut@local-plugins` (preferred for user-facing offers — tab-complete + arg-hint); (b) direct skill invocation as `playground:playground` from prose.
+- `playground-shortcut@local-plugins` — thin slash-command wrapper around `playground:playground`. Exposes `/playground <verb> the <artifact> [(template: <name>)]` so the playground hop sits next to `/find-repos`, `/last30days`, and `/deep-research` in chain diagrams and tab-complete. Argument shape enforces verb + artifact + template structure (the three properties that make playground outputs usable). Plugin lives at `05 AI/CLAUDE CODE/plugins/playground-shortcut/`; reload by restarting CC after install or by running `/plugin marketplace update local-plugins`.
 - `superpowers:writing-plans` — present in `superpowers:brainstorming`'s native handoff chain; this skill OVERRIDES that handoff to route to `ce-plan` instead.
 
 ### Vault Conventions
@@ -286,7 +368,7 @@ Post-rename evidence: see commit log for `/deep-planning` runs from 2026-05-08 f
 - **Predecessor:** `/spec-writer` (hard-retired 2026-05-08; this skill replaces it)
 - **Compound Engineering core loop:** `/ce-strategy → /ce-ideate → /ce-brainstorm → /ce-plan → /ce-work → /ce-compound` — `/deep-planning` orchestrates the planning subset (strategy → brainstorm → plan); execution and compounding are downstream
 - **Spinoff:** [[Skill Surfacing Layer]] — incubating project for cross-session skill awareness via `/session-close`, `/retro`, and continuation prompts
-- **Stage skills:** `/last30days`, `/deep-research`, `/find-repos`, `superpowers:brainstorming`, `compound-engineering:ce-brainstorm`, `compound-engineering:ce-strategy`, `compound-engineering:ce-ideate`, `compound-engineering:ce-plan`, `compound-engineering:ce-doc-review`, `/ce:work`
+- **Stage skills:** `/last30days`, `/deep-research`, `/find-repos`, `/find-related`, `superpowers:brainstorming`, `compound-engineering:ce-brainstorm`, `compound-engineering:ce-strategy`, `compound-engineering:ce-ideate`, `compound-engineering:ce-plan`, `compound-engineering:ce-doc-review`, `/ce:work`
 - **Conventions:** `feedback_plans_to_inbox.md`, `feedback_deliverables_to_inbox.md`, `feedback_deepen_plan_inline_default.md`, Bufalinda Rule 1 (Spanish), [[Vault Source-of-Truth]]
 
 ## Migration note (2026-05-08)
