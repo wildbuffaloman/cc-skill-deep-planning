@@ -1,6 +1,6 @@
 ---
 name: deep-planning
-version: "0.4.2"
+version: "0.4.3"
 description: Mode-based router for any complex planning exercise prior to executing. Three modes (Quick / Build / Strategic) calibrate ordering, skill selection, and Compound Engineering integration to the intent and complexity of the work. Replaces /spec-writer (hard-retired 2026-05-08). Use when the user says "spec out X", "design the system for X", "let's plan X properly", "scope this sub-project", "evaluate", "explore", "from scratch", "rethink", or returns to an in-progress /project-create with non-trivial complexity.
 user-invocable: true
 argument-hint: "topic description (short sentence of what to plan)"
@@ -356,6 +356,7 @@ Post-rename evidence: see commit log for `/deep-planning` runs from 2026-05-08 f
 - [[Plan Sync Protocol]] — when the resulting plan touches a `sync_status: production` document
 - [[Vault Source-of-Truth]] — this skill itself lives in vault, symlinked to `~/.claude/skills/`
 - [[Skill Dependencies Declaration]] — this section
+- [[Deterministic Compliance]] (LLM-Last Default) — when the plan designs automation or code, run the LLM-Last decision test per step: default to deterministic code, reserve LLM calls for genuine judgment (NL / synthesis / real ambiguity / taste)
 - `feedback_plans_to_inbox.md` — output-path override convention
 - `feedback_deepen_plan_inline_default.md` — ultrathink deepening pass behavior
 - `feedback_deep_planning_workflow.md` — collaboration preferences (rewritten from prior `feedback_spec_writing_workflow.md`)
